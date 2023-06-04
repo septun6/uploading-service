@@ -1,13 +1,20 @@
 import { Controller, Get, MaxFileSizeValidator, ParseFilePipe, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { AppService } from './app.service';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Transport, Client, ClientProxy } from '@nestjs/microservices';
+import { Observable, firstValueFrom } from 'rxjs';
+
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
-  // while files are not passed to core-service,
-  // they are stored in the dynamic dictionary
-  files= new Map<string, Express.Multer.File>;
+  @Client({
+    transport: Transport.NATS,
+    options: {
+      url: ['nats://localhost:4222'],
+    },
+  })
+  client: ClientProxy;
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -17,13 +24,12 @@ export class AppController {
         new MaxFileSizeValidator({ maxSize: 5000000})
       ]
     })
-  ) file: Express.Multer.File) {
-    this.files[file.originalname] = file;
-    console.log(file);
+  ) file: Express.Multer.File): Promise<any> {
+    return firstValueFrom(this.client.send('upload', file));
   }
 
   @Get()
-  getHello(): Map<string, Express.Multer.File>{
-    return this.files;
+  async getFiles(): Promise<Observable<any>>{
+    return await this.client.send('list', '');
   }
 }
